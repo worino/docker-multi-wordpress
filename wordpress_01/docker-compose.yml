@@ -5,21 +5,47 @@ services:
   db:
     container_name: $DB_CONTAINER
     image: mariadb:latest
+    logging:
+      driver: none
+    command: ["--max-allowed-packet=512M"]
     restart: always
     volumes:
       - /srv/www/${VIRTUAL_HOST}/db_data:/var/lib/mysql
     environment:
-      MYSQL_RANDOM_ROOT_PASSWORD: 1
+      MYSQL_RANDOM_ROOT_PASSWORD: $DB_PASSWORD
       MYSQL_DATABASE: $DB_NAME
       MYSQL_USER: $DB_USER
       MYSQL_PASSWORD: $DB_PASSWORD
-
+    networks:
+      - default
+  phpmyadmin:
+    image: bitnami/phpmyadmin:5.2.0-debian-11-r43
+    ports:
+      - 8080:8080
+      - 8443:8443
+    environment:
+        DATABASE_HOST: $DB_CONTAINER
+    restart: always
+    networks:
+      - default
+  redis:
+    image: "redis:alpine"
+    logging:
+      driver: none
+    # command: redis-server --requirepass 8b405f60665e48f795752e534d93b722
+    volumes:
+      - ./redis/data:/var/lib/redis
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf
+    environment:
+      - REDIS_REPLICATION_MODE=master
+    restart: always
+    networks:
+      - default
   wp:
     container_name: $WP_CONTAINER
     build: .
     depends_on:
       - db
-      - cp
     restart: always
     volumes:
       - ./theme:/var/www/html/wp-content/themes/${WP_THEME}:rw
@@ -37,15 +63,8 @@ services:
       LETSENCRYPT_EMAIL: $LETSENCRYPT_EMAIL
       #LETSENCRYPT_TEST: 'true'
 
-  cp:
-    build: composer
-    container_name: ${COMPOSER_CONTAINER}
-    volumes:
-      - /srv/www/${VIRTUAL_HOST}/wp_content:/app/wp-content
-    command: composer install
-
 networks:
   default:
-    external:
-      name: nginx_proxy
+    external: true
+    name: nginx_proxy
 
